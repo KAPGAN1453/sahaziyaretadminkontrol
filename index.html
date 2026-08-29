@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mutlu Akü - Yönetici Portalı</title>
+    
+    <!-- PWA & Mobil Ayarları -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#d32f2f">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon.png" type="image/png">
+    <link rel="apple-touch-icon" href="icon.png">
+    
+    <!-- Bootstrap & FontAwesome -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
+
+    <style>
+        body {
+            background-color: #0f141c;
+            color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding-bottom: 40px;
+        }
+        .header-card {
+            background-color: #1a2230;
+            padding: 18px 25px;
+            border-radius: 12px;
+            border-left: 6px solid #d32f2f;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        .custom-card {
+            background-color: #1a2230;
+            border: 1px solid #2a3649;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+        }
+        .form-label {
+            color: #cbd5e1 !important;
+            font-weight: 500;
+        }
+        .form-control, .form-select {
+            background-color: #101620;
+            border: 1px solid #334155;
+            color: #ffffff;
+            border-radius: 8px;
+            padding: 10px;
+        }
+        .form-control:focus, .form-select:focus {
+            background-color: #101620;
+            color: #fff;
+            border-color: #d32f2f;
+            box-shadow: 0 0 0 0.25rem rgba(211, 47, 47, 0.25);
+        }
+        .btn-danger-custom {
+            background-color: #d32f2f;
+            border: none;
+            color: white;
+            padding: 10px;
+            font-weight: bold;
+            border-radius: 8px;
+            transition: 0.3s;
+        }
+        .btn-danger-custom:hover {
+            background-color: #b71c1c;
+        }
+        .table-dark-custom {
+            background-color: #101620 !important;
+            color: #ffffff !important;
+            border-radius: 8px;
+            overflow: hidden;
+            font-size: 0.78rem;
+            width: 100%;
+            white-space: nowrap;
+        }
+        .table-dark-custom th {
+            background-color: #1f293d !important;
+            color: #ffffff !important;
+            border-color: #334155 !important;
+            font-weight: 600;
+            text-align: center;
+            vertical-align: middle;
+            padding: 6px 8px !important;
+        }
+        .table-dark-custom td {
+            background-color: #101620 !important;
+            color: #ffffff !important;
+            border-color: #2a3649 !important;
+            vertical-align: middle;
+            padding: 5px 8px !important;
+        }
+        .table-dark-custom tr:hover td {
+            background-color: #1a2230 !important;
+        }
+        .nav-tabs .nav-link {
+            color: #94a3b8;
+            border: none;
+            font-weight: 600;
+        }
+        .nav-tabs .nav-link.active {
+            background-color: #1a2230;
+            color: #d32f2f;
+            border-bottom: 3px solid #d32f2f;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container-fluid px-4 mt-3" id="appContainer"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, getDocs, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "SENIN_API_KEY",
+            authDomain: "saha-ziyaret-formu.firebaseapp.com",
+            projectId: "saha-ziyaret-formu",
+            storageBucket: "saha-ziyaret-formu.appspot.com",
+            messagingSenderId: "SENDER_ID",
+            appId: "APP_ID"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        let currentUser = localStorage.getItem("mutlu_admin_user") || null;
+        let globalZiyaretler = [];
+
+        function formatTelefon(tel) {
+            if (!tel) return "";
+            let t = String(tel).trim();
+            if (t.length === 10 && !t.startsWith("0")) {
+                t = "0" + t;
+            }
+            return t;
+        }
+
+        function renderApp() {
+            const container = document.getElementById("appContainer");
+            
+            if (!currentUser) {
+                container.innerHTML = `
+                    <div class="row justify-content-center mt-5">
+                        <div class="col-md-5 col-lg-4">
+                            <div class="header-card text-center">
+                                <img src="icon.png" alt="Logo" style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; margin-bottom: 10px; border: 2px solid #d32f2f;">
+                                <h4 class="text-white fw-bold">MUTLU AKÜ</h4>
+                                <p class="text-light opacity-75 mb-0">Yönetici Portalı Giriş Ekranı</p>
+                            </div>
+                            <div class="custom-card">
+                                <form id="loginForm">
+                                    <div class="mb-3">
+                                        <label class="form-label">Kullanıcı Adı</label>
+                                        <input type="text" id="username" class="form-control" required placeholder="Kullanıcı adınızı girin">
+                                    </div>
+                                    <div class="mb-4">
+                                        <label class="form-label">Şifre</label>
+                                        <input type="password" id="password" class="form-control" required placeholder="Şifreniz">
+                                    </div>
+                                    <button type="submit" class="btn btn-danger-custom w-100">GİRİŞ YAP</button>
+                                </form>
+                                <div id="loginError" class="alert alert-danger mt-3 d-none text-center py-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                document.getElementById("loginForm").addEventListener("submit", async (e) => {
+                    e.preventDefault();
+                    const u = document.getElementById("username").value.trim().toLowerCase();
+                    const p = document.getElementById("password").value.trim();
+                    const errDiv = document.getElementById("loginError");
+
+                    const varsayilanlar = { "gguner": "1", "mkuscu": "1", "bazat": "1", "hsert": "1", "kutlukut": "1" };
+
+                    try {
+                        const userRef = doc(db, "kullanicilar", u);
+                        const userSnap = await getDoc(userRef);
+                        let dbSifre = userSnap.exists() ? userSnap.data().sifre : null;
+
+                        if (!dbSifre && varsayilanlar[u] === p) {
+                            await setDoc(userRef, { sifre: p });
+                            dbSifre = p;
+                        }
+
+                        if (dbSifre && dbSifre === p) {
+                            currentUser = u;
+                            localStorage.setItem("mutlu_admin_user", u);
+                            renderApp();
+                        } else {
+                            errDiv.textContent = "Hatalı kullanıcı adı veya şifre!";
+                            errDiv.classList.remove("d-none");
+                        }
+                    } catch (err) {
+                        errDiv.textContent = "Bağlantı hatası oluştu!";
+                        errDiv.classList.remove("d-none");
+                    }
+                });
+
+            } else {
+                container.innerHTML = `
+                    <div class="header-card d-flex justify-content-between align-items-center flex-wrap">
+                        <div>
+                            <h4 class="text-white fw-bold m-0"><i class="fa-solid fa-shield-halved text-danger me-2"></i> Yönetim Paneli</h4>
+                            <p class="text-light opacity-75 m-0 mt-1">Aktif Yönetici: <span class="text-white text-uppercase fw-bold">${currentUser}</span></p>
+                        </div>
+                        <button id="logoutBtn" class="btn btn-outline-light btn-sm mt-2 mt-md-0"><i class="fa-solid fa-right-from-bracket me-1"></i> Çıkış Yap</button>
+                    </div>
+
+                    <ul class="nav nav-tabs mb-3" id="adminTabs" role="tablist">
+                        <li class="nav-item"><button class="nav-link active" id="tab-list" data-bs-toggle="tab" data-bs-target="#listContent" type="button">📊 Ziyaret Listesi</button></li>
+                        <li class="nav-item"><button class="nav-link" id="tab-pass" data-bs-toggle="tab" data-bs-target="#passContent" type="button">🔑 Şifre Değiştir</button></li>
+                    </ul>
+
+                    <div class="tab-content" id="adminTabContent">
+                        <div class="tab-pane fade show active" id="listContent">
+                            <div class="custom-card mb-3">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                                    <button id="refreshBtn" class="btn btn-outline-danger btn-sm text-white"><i class="fa-solid fa-rotate me-1"></i> Verileri Yenile</button>
+                                    <button id="excelBtn" class="btn btn-success btn-sm"><i class="fa-solid fa-file-excel me-1"></i> Excel Olarak İndir</button>
+                                </div>
+                                <div id="tableLoading" class="text-center py-4 text-light"><i class="fa-solid fa-spinner fa-spin me-2"></i> Veriler yükleniyor...</div>
+                                <div class="table-responsive">
+                                    <table id="ziyaretTable" class="table table-bordered table-dark-custom d-none">
+                                        <thead id="tableHead"></thead>
+                                        <tbody id="tableBody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tab-pane fade" id="passContent">
+                            <div class="row justify-content-center">
+                                <div class="col-md-5">
+                                    <div class="custom-card">
+                                        <h5 class="text-white mb-3">Şifre Güncelle</h5>
+                                        <form id="passForm">
+                                            <div class="mb-3">
+                                                <label class="form-label">Mevcut Şifre</label>
+                                                <input type="password" id="oldPass" class="form-control" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Yeni Şifre</label>
+                                                <input type="password" id="newPass" class="form-control" required>
+                                            </div>
+                                            <div class="mb-4">
+                                                <label class="form-label">Yeni Şifre (Tekrar)</label>
+                                                <input type="password" id="newPassConfirm" class="form-control" required>
+                                            </div>
+                                            <button type="submit" class="btn btn-danger-custom w-100">ŞİFREYİ GÜNCELLE</button>
+                                        </form>
+                                        <div id="passMsg" class="mt-3 text-center d-none"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                document.getElementById("logoutBtn").addEventListener("click", () => {
+                    localStorage.removeItem("mutlu_admin_user");
+                    currentUser = null;
+                    renderApp();
+                });
+
+                document.getElementById("refreshBtn").addEventListener("click", loadData);
+                document.getElementById("excelBtn").addEventListener("click", exportExcel);
+
+                document.getElementById("passForm").addEventListener("submit", async (e) => {
+                    e.preventDefault();
+                    const oldP = document.getElementById("oldPass").value;
+                    const newP = document.getElementById("newPass").value;
+                    const confirmP = document.getElementById("newPassConfirm").value;
+                    const msgDiv = document.getElementById("passMsg");
+
+                    if (newP !== confirmP) {
+                        msgDiv.className = "mt-3 text-center text-danger";
+                        msgDiv.textContent = "Yeni şifreler uyuşmuyor!";
+                        msgDiv.classList.remove("d-none");
+                        return;
+                    }
+
+                    try {
+                        const userRef = doc(db, "kullanicilar", currentUser);
+                        const userSnap = await getDoc(userRef);
+                        const currentDbPass = userSnap.exists() ? userSnap.data().sifre : "1";
+
+                        if (oldP === currentDbPass) {
+                            await setDoc(userRef, { sifre: newP }, { merge: true });
+                            msgDiv.className = "mt-3 text-center text-success";
+                            msgDiv.textContent = "Şifreniz başarıyla güncellendi!";
+                            msgDiv.classList.remove("d-none");
+                            document.getElementById("passForm").reset();
+                        } else {
+                            msgDiv.className = "mt-3 text-center text-danger";
+                            msgDiv.textContent = "Mevcut şifrenizi yanlış girdiniz!";
+                            msgDiv.classList.remove("d-none");
+                        }
+                    } catch (err) {
+                        msgDiv.className = "mt-3 text-center text-danger";
+                        msgDiv.textContent = "Hata oluştu!";
+                        msgDiv.classList.remove("d-none");
+                    }
+                });
+
+                loadData();
+            }
+        }
+
+        async function loadData() {
+            const loading = document.getElementById("tableLoading");
+            const table = document.getElementById("ziyaretTable");
+            const tHead = document.getElementById("tableHead");
+            const tBody = document.getElementById("tableBody");
+
+            loading.classList.remove("d-none");
+            table.classList.add("d-none");
+
+            try {
+                const querySnapshot = await getDocs(collection(db, "ziyaretler"));
+                globalZiyaretler = [];
+                querySnapshot.forEach((doc) => {
+                    globalZiyaretler.push(doc.data());
+                });
+
+                loading.classList.add("d-none");
+
+                if (globalZiyaretler.length > 0) {
+                    table.classList.remove("d-none");
+
+                    const raporMap = {};
+                    globalZiyaretler.forEach(item => {
+                        const tarih = item.tarih || item.Tarih || "";
+                        const bolgeMuduru = item.bolge_muduru || item.bolgeMuduru || "";
+                        const bolgeSahaYonetici = item.satis_yoneti || item.satis_yoneticisi || item.kullanici || "";
+                        const distributor = item.distributor || item.isyeri_adi || "";
+
+                        const key = `${tarih}_${bolgeMuduru}_${bolgeSahaYonetici}_${distributor}`;
+
+                        if (!raporMap[key]) {
+                            raporMap[key] = {
+                                tarih: tarih,
+                                bolgeMuduru: bolgeMuduru,
+                                bolgeSahaYonetici: bolgeSahaYonetici,
+                                distributor: distributor,
+                                bayiler: []
+                            };
+                        }
+
+                        if (raporMap[key].bayiler.length < 10) {
+                            raporMap[key].bayiler.push({
+                                isyeriAdi: item.isyeri_adi || "",
+                                gorusulenYetkili: item.sahip_ad_soyad || item.yetkili_kisi || "",
+                                telefon: formatTelefon(item.telefon),
+                                mevcutAkuStok: item.mevcut_stok || item.stok_adedi || item.stok || item.adet || item.urun_adedi || item.mevcut_aku_stok || item.stok_miktari || item.miktar || "",
+                                rakipMarkalar: item.markalar || item.rakip_markalar || ""
+                            });
+                        }
+                    });
+
+                    let headHtml = `<tr>
+                        <th>Tarih</th>
+                        <th>Bölge Müdürü</th>
+                        <th>Saha Yöneticisi</th>
+                        <th>Distribütör</th>
+                        <th>Ziyaret</th>`;
+                    for (let b = 1; b <= 10; b++) {
+                        headHtml += `<th>Bayi ${b}</th>`;
+                    }
+                    headHtml += `<th>Toplam Ziyaret</th><th>Hedef</th><th>Hedef Gerçekleşme</th></tr>`;
+                    tHead.innerHTML = headHtml;
+
+                    let bodyHtml = "";
+                    Object.values(raporMap).forEach(grup => {
+                        const satirIsmi = [
+                            "Bayi / İşyeri İsmi",
+                            "Görüşülen Yetkili",
+                            "Telefon",
+                            "Mevcut Akü Stok Adedi",
+                            "Rakip / Diğer Markalar"
+                        ];
+
+                        const toplamZiyaret = grup.bayiler.length;
+                        const hedef = 7;
+                        const gerceklesmeYuzdesi = Math.round((toplamZiyaret / hedef) * 100) + "%";
+
+                        for (let i = 0; i < 5; i++) {
+                            bodyHtml += `<tr>`;
+                            if (i === 0) {
+                                bodyHtml += `<td rowspan="5" class="text-center">${grup.tarih}</td>`;
+                                bodyHtml += `<td rowspan="5" class="text-center">${grup.bolgeMuduru}</td>`;
+                                bodyHtml += `<td rowspan="5" class="text-center">${grup.bolgeSahaYonetici}</td>`;
+                                bodyHtml += `<td rowspan="5" class="text-center">${grup.distributor}</td>`;
+                            }
+                            bodyHtml += `<td class="text-center"><b>${satirIsmi[i]}</b></td>`;
+
+                            for (let b = 0; b < 10; b++) {
+                                const bayiVerisi = grup.bayiler[b];
+                                let val = "";
+                                if (bayiVerisi) {
+                                    if (i === 0) val = bayiVerisi.isyeriAdi;
+                                    else if (i === 1) val = bayiVerisi.gorusulenYetkili;
+                                    else if (i === 2) val = bayiVerisi.telefon;
+                                    else if (i === 3) val = bayiVerisi.mevcutAkuStok;
+                                    else if (i === 4) val = bayiVerisi.rakipMarkalar;
+                                }
+                                bodyHtml += `<td class="text-center">${val}</td>`;
+                            }
+
+                            if (i === 0) {
+                                bodyHtml += `<td rowspan="5" class="text-center fw-bold">${toplamZiyaret}</td>`;
+                                bodyHtml += `<td rowspan="5" class="text-center fw-bold">${hedef}</td>`;
+                                bodyHtml += `<td rowspan="5" class="text-center fw-bold">${gerceklesmeYuzdesi}</td>`;
+                            }
+                            bodyHtml += `</tr>`;
+                        }
+                    });
+
+                    tBody.innerHTML = bodyHtml;
+                }
+            } catch (err) {
+                loading.textContent = "Veriler yüklenirken hata oluştu!";
+            }
+        }
+
+        function exportExcel() {
+            if (globalZiyaretler.length === 0) {
+                alert("İndirilecek veri bulunmuyor!");
+                return;
+            }
+
+            const raporMap = {};
+
+            globalZiyaretler.forEach(item => {
+                const tarih = item.tarih || item.Tarih || "";
+                const bolgeMuduru = item.bolge_muduru || item.bolgeMuduru || "";
+                const bolgeSahaYonetici = item.satis_yoneti || item.satis_yoneticisi || item.kullanici || "";
+                const distributor = item.distributor || item.isyeri_adi || "";
+
+                const key = `${tarih}_${bolgeMuduru}_${bolgeSahaYonetici}_${distributor}`;
+
+                if (!raporMap[key]) {
+                    raporMap[key] = {
+                        tarih: tarih,
+                        bolgeMuduru: bolgeMuduru,
+                        bolgeSahaYonetici: bolgeSahaYonetici,
+                        distributor: distributor,
+                        bayiler: []
+                    };
+                }
+
+                if (raporMap[key].bayiler.length < 10) {
+                    raporMap[key].bayiler.push({
+                        isyeriAdi: item.isyeri_adi || "",
+                        gorusulenYetkili: item.sahip_ad_soyad || item.yetkili_kisi || "",
+                        telefon: formatTelefon(item.telefon),
+                        mevcutAkuStok: item.mevcut_stok || item.stok_adedi || item.stok || item.adet || item.urun_adedi || item.mevcut_aku_stok || item.stok_miktari || item.miktar || "",
+                        rakipMarkalar: item.markalar || item.rakip_markalar || ""
+                    });
+                }
+            });
+
+            const sheetData = [];
+            
+            const headers = ["Tarih", "Bölge Müdürü", "Bölge Saha Yöneticisi", "Distribütör", "Ziyaret"];
+            for (let b = 1; b <= 10; b++) headers.push(`Bayi ${b}`);
+            headers.push("Toplam Ziyaret", "Hedef", "Hedef Gerçekleşme");
+            sheetData.push(headers);
+
+            const merges = [];
+            let currentRowIndex = 1;
+
+            Object.values(raporMap).forEach(grup => {
+                const satirIsmi = [
+                    "Bayi / İşyeri İsmi",
+                    "Görüşülen Yetkili",
+                    "Telefon",
+                    "Mevcut Akü Stok Adedi",
+                    "Rakip / Diğer Markalar"
+                ];
+
+                for (let i = 0; i < 5; i++) {
+                    const row = [
+                        i === 0 ? grup.tarih : "",
+                        i === 0 ? grup.bolgeMuduru : "",
+                        i === 0 ? grup.bolgeSahaYonetici : "",
+                        i === 0 ? grup.distributor : "",
+                        satirIsmi[i]
+                    ];
+
+                    for (let b = 0; b < 10; b++) {
+                        const bayiVerisi = grup.bayiler[b];
+                        if (bayiVerisi) {
+                            if (i === 0) row.push(bayiVerisi.isyeriAdi);
+                            else if (i === 1) row.push(bayiVerisi.gorusulenYetkili);
+                            else if (i === 2) row.push(bayiVerisi.telefon);
+                            else if (i === 3) row.push(bayiVerisi.mevcutAkuStok);
+                            else if (i === 4) row.push(bayiVerisi.rakipMarkalar);
+                        } else {
+                            row.push("");
+                        }
+                    }
+
+                    const toplamZiyaret = grup.bayiler.length;
+                    const hedef = 7;
+                    const gerceklesmeYuzdesi = Math.round((toplamZiyaret / hedef) * 100) + "%";
+
+                    row.push(i === 0 ? toplamZiyaret : "");
+                    row.push(i === 0 ? hedef : "");
+                    row.push(i === 0 ? gerceklesmeYuzdesi : "");
+
+                    sheetData.push(row);
+                }
+
+                const startRow = currentRowIndex;
+                const endRow = currentRowIndex + 4;
+
+                [0, 1, 2, 3, 15, 16, 17].forEach(colIdx => {
+                    merges.push({ s: { r: startRow, c: colIdx }, e: { r: endRow, c: colIdx } });
+                });
+
+                currentRowIndex += 5;
+            });
+
+            const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+            worksheet['!merges'] = merges;
+
+            const thinBorder = {
+                top: { style: "thin", color: { rgb: "000000" } },
+                bottom: { style: "thin", color: { rgb: "000000" } },
+                left: { style: "thin", color: { rgb: "000000" } },
+                right: { style: "thin", color: { rgb: "000000" } }
+            };
+
+            const range = XLSX.utils.decode_range(worksheet['!ref']);
+            for (let R = range.s.r; R <= range.e.r; ++R) {
+                for (let C = range.s.c; C <= range.e.c; ++C) {
+                    const cellAddress = XLSX.utils.encode_cell({r: R, c: C});
+                    if (!worksheet[cellAddress]) {
+                        worksheet[cellAddress] = { t: 's', v: '' };
+                    }
+                    
+                    if (!worksheet[cellAddress].s) worksheet[cellAddress].s = {};
+
+                    // Hücreleri tam ortala ve kenarlık ekle
+                    worksheet[cellAddress].s.alignment = { vertical: "center", horizontal: "center", wrapText: false };
+                    worksheet[cellAddress].s.border = thinBorder;
+
+                    if (R >= 1 && R <= range.e.r) {
+                        worksheet[cellAddress].s.font = { name: "Calibri", sz: 10, color: { rgb: "000000" }};
+                        
+                        // Telefon numarasını metin olarak koru
+                        if (R % 5 === 2) {
+                            worksheet[cellAddress].t = 's';
+                            worksheet[cellAddress].v = String(worksheet[cellAddress].v || "");
+                        }
+                    }
+
+                    // 1. Satır (Başlıklar) Renklendirmesi
+                    if (R === 0) {
+                        worksheet[cellAddress].s.font = { name: "Calibri", sz: 11, bold: true, color: { rgb: "000000" } };
+                        
+                        if (C >= 0 && C <= 4) {
+                            worksheet[cellAddress].s.fill = { patternType: "solid", fgColor: { rgb: "D3D3D3" } };
+                        } else if (C >= 5 && C <= 14) {
+                            worksheet[cellAddress].s.fill = { patternType: "solid", fgColor: { rgb: "C6EFCE" } };
+                        } else if (C >= 15 && C <= 17) {
+                            worksheet[cellAddress].s.fill = { patternType: "solid", fgColor: { rgb: "D3D3D3" } };
+                        }
+                    }
+                }
+            }
+
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Saha Ziyaretleri");
+            XLSX.writeFile(workbook, "Mutlu_Aku_Saha_Ziyaret_Raporu.xlsx");
+        }
+        renderApp();
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
