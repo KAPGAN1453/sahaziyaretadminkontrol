@@ -131,6 +131,14 @@
 
         let currentUser = localStorage.getItem("mutlu_admin_user") || null;
         let globalZiyaretler = [];
+        let deferredPrompt = null;
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            const installBtn = document.getElementById('installAppBtn');
+            if (installBtn) installBtn.classList.remove('d-none');
+        });
 
         function formatTelefon(tel) {
             if (!tel) return "";
@@ -166,10 +174,15 @@
                                     <button type="submit" class="btn btn-danger-custom w-100">GİRİŞ YAP</button>
                                 </form>
                                 <div id="loginError" class="alert alert-danger mt-3 d-none text-center py-2"></div>
+                                <div class="text-center mt-3">
+                                    <button id="installAppBtn" class="btn btn-outline-light btn-sm d-none w-100"><i class="fa-solid fa-download me-1"></i> Uygulamayı Telefona Yükle</button>
+                                </div>
                             </div>
                         </div>
                     </div>
                 `;
+
+                setupInstallButton();
 
                 document.getElementById("loginForm").addEventListener("submit", async (e) => {
                     e.preventDefault();
@@ -210,7 +223,10 @@
                             <h4 class="text-white fw-bold m-0"><i class="fa-solid fa-shield-halved text-danger me-2"></i> Yönetim Paneli</h4>
                             <p class="text-light opacity-75 m-0 mt-1">Aktif Yönetici: <span class="text-white text-uppercase fw-bold">${currentUser}</span></p>
                         </div>
-                        <button id="logoutBtn" class="btn btn-outline-light btn-sm mt-2 mt-md-0"><i class="fa-solid fa-right-from-bracket me-1"></i> Çıkış Yap</button>
+                        <div class="d-flex gap-2 mt-2 mt-md-0">
+                            <button id="installAppBtn" class="btn btn-outline-light btn-sm d-none"><i class="fa-solid fa-download me-1"></i> Yükle</button>
+                            <button id="logoutBtn" class="btn btn-outline-light btn-sm"><i class="fa-solid fa-right-from-bracket me-1"></i> Çıkış Yap</button>
+                        </div>
                     </div>
 
                     <ul class="nav nav-tabs mb-3" id="adminTabs" role="tablist">
@@ -263,6 +279,8 @@
                     </div>
                 `;
 
+                setupInstallButton();
+
                 document.getElementById("logoutBtn").addEventListener("click", () => {
                     localStorage.removeItem("mutlu_admin_user");
                     currentUser = null;
@@ -310,6 +328,21 @@
                 });
 
                 loadData();
+            }
+        }
+
+        function setupInstallButton() {
+            const installBtn = document.getElementById('installAppBtn');
+            if (installBtn && deferredPrompt) {
+                installBtn.classList.remove('d-none');
+                installBtn.onclick = async () => {
+                    deferredPrompt.prompt();
+                    const { outcome } = await deferredPrompt.userChoice;
+                    if (outcome === 'accepted') {
+                        deferredPrompt = null;
+                        installBtn.classList.add('d-none');
+                    }
+                };
             }
         }
 
@@ -548,24 +581,19 @@
                     
                     if (!worksheet[cellAddress].s) worksheet[cellAddress].s = {};
 
-                    // Hücreleri tam ortala ve kenarlık ekle
                     worksheet[cellAddress].s.alignment = { vertical: "center", horizontal: "center", wrapText: false };
                     worksheet[cellAddress].s.border = thinBorder;
 
                     if (R >= 1 && R <= range.e.r) {
                         worksheet[cellAddress].s.font = { name: "Calibri", sz: 10, color: { rgb: "000000" }};
-                        
-                        // Telefon numarasını metin olarak koru
                         if (R % 5 === 2) {
                             worksheet[cellAddress].t = 's';
                             worksheet[cellAddress].v = String(worksheet[cellAddress].v || "");
                         }
                     }
 
-                    // 1. Satır (Başlıklar) Renklendirmesi
                     if (R === 0) {
                         worksheet[cellAddress].s.font = { name: "Calibri", sz: 11, bold: true, color: { rgb: "000000" } };
-                        
                         if (C >= 0 && C <= 4) {
                             worksheet[cellAddress].s.fill = { patternType: "solid", fgColor: { rgb: "D3D3D3" } };
                         } else if (C >= 5 && C <= 14) {
@@ -578,6 +606,7 @@
             }
 
             const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, workbook, "Saha Ziyaretleri"); // düzeltildi
             XLSX.utils.book_append_sheet(workbook, worksheet, "Saha Ziyaretleri");
             XLSX.writeFile(workbook, "Mutlu_Aku_Saha_Ziyaret_Raporu.xlsx");
         }
